@@ -239,13 +239,13 @@ if df_raw is not None and artifacts is not None:
             
         elif model_key == 'isoforest':
             # IF predicts -1 for anomaly (spam) and 1 for normal (ham)
-            if_pred = model.predict(X_val)
+            if_pred = model.predict(X_val.values)
             Y_pred = [1 if x == -1 else 0 for x in if_pred]
-            Y_pred_proba = -model.decision_function(X_val)
+            Y_pred_proba = -model.decision_function(X_val.values)
             
         else:
-            Y_pred = model.predict(X_val)
-            Y_pred_proba = model.predict_proba(X_val)[:, 1]
+            Y_pred = model.predict(X_val.values)
+            Y_pred_proba = model.predict_proba(X_val.values)[:, 1]
 
         col1, col2 = st.columns(2)
         with col1:
@@ -332,12 +332,12 @@ if df_raw is not None and artifacts is not None:
                     ], axis=1)
                     
                     if model_key == 'isoforest':
-                        pred_raw = model.predict(input_final)[0]
+                        pred_raw = model.predict(input_final.values)[0]
                         prediction = 1 if pred_raw == -1 else 0
-                        probability = -model.decision_function(input_final)[0]
+                        probability = -model.decision_function(input_final.values)[0]
                     else:
-                        prediction = model.predict(input_final)[0]
-                        probability = model.predict_proba(input_final)[0][1]
+                        prediction = model.predict(input_final.values)[0]
+                        probability = model.predict_proba(input_final.values)[0][1]
 
                 # Display Result
                 st.markdown("### Result:")
