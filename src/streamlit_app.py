@@ -115,7 +115,7 @@ def preprocess_dataframe(df):
     df['lemmatization'] = df['stopwords'].apply(apply_lemmatization)
     return df
 
-@st.cache_data
+
 def perform_data_split(df, tfidf_vectorizer, scaler, tokenizer, maxlen=200):
     """Melakukan split data 70% train, 15% validation, 15% test dan pra-pemrosesan fitur."""
     
