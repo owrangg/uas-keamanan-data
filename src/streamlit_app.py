@@ -96,7 +96,7 @@ def preprocess_dataframe(df):
 
 # --- Main App ---
 
-st.title("🛡️ Spam Detection Dashboard")
+st.title(" Spam Detection Dashboard")
 
 df_raw = load_data()
 
