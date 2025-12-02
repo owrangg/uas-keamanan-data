@@ -332,12 +332,12 @@ if df_raw is not None and artifacts is not None:
                     ], axis=1)
                     
                     if model_key == 'isoforest':
-                        pred_raw = model.predict(input_final.values)[0]
+                        pred_raw = model.predict(input_final)[0]
                         prediction = 1 if pred_raw == -1 else 0
-                        probability = -model.decision_function(input_final.values)[0]
+                        probability = -model.decision_function(input_final)[0]
                     else:
-                        prediction = model.predict(input_final.values)[0]
-                        probability = model.predict_proba(input_final.values)[0][1]
+                        prediction = model.predict(input_final)[0]
+                        probability = model.predict_proba(input_final)[0][1]
 
                 # Display Result
                 st.markdown("### Result:")
