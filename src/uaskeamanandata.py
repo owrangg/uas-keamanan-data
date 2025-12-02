@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 import string
+import os
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -78,7 +79,9 @@ def load_and_prepare_data():
     
     # Ganti dengan path file yang sesuai jika bukan 'spam.csv'
     try:
-        df = pd.read_csv('../data/spam.csv', encoding='latin-1')
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        data_path = os.path.join(current_dir, '..', 'data', 'spam.csv')
+        df = pd.read_csv(data_path, encoding='latin-1')
     except FileNotFoundError:
         st.error("File 'spam.csv' tidak ditemukan. Pastikan file ada di direktori data.")
         return None, None, None, None, None, None, None

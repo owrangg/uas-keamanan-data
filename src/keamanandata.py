@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 import string
+import os
 import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
@@ -40,7 +41,9 @@ def load_data_and_setup():
         st.error(f"Gagal mengunduh data NLTK: {e}")
 
     # Memuat Dataset
-    df = pd.read_csv('../data/spam.csv', encoding='latin-1')
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(current_dir, '..', 'data', 'spam.csv')
+    df = pd.read_csv(data_path, encoding='latin-1')
     df = df.drop(columns=['Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4'])
     df = df.rename(columns={'v1': 'label', 'v2': 'message'})
     df['length'] = df['message'].apply(len)

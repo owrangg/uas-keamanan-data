@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 import string
+import os
 import nltk
 import joblib
 
@@ -19,9 +20,12 @@ from sklearn.ensemble import RandomForestClassifier
 
 @st.cache_resource
 def load_models():
-    tfidf = joblib.load("../models/tfidf.pkl")
-    scaler = joblib.load("../models/scaler.pkl")
-    model = joblib.load("../models/rf.pkl")   # ganti jika ingin pakai XGBoost/LGBM/CNN
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    models_dir = os.path.join(current_dir, '..', 'models')
+    
+    tfidf = joblib.load(os.path.join(models_dir, "tfidf.pkl"))
+    scaler = joblib.load(os.path.join(models_dir, "scaler.pkl"))
+    model = joblib.load(os.path.join(models_dir, "rf.pkl"))   # ganti jika ingin pakai XGBoost/LGBM/CNN
     return tfidf, scaler, model
 
 tfidf, scaler, model = load_models()

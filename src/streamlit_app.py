@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import re
 import string
+import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 import nltk
@@ -45,14 +46,18 @@ download_nltk_data()
 @st.cache_data
 def load_data():
     try:
-        df = pd.read_csv('../data/spam.csv', encoding='latin-1')
+        # Construct absolute path to data file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        data_path = os.path.join(current_dir, '..', 'data', 'spam.csv')
+        
+        df = pd.read_csv(data_path, encoding='latin-1')
         df = df.drop(columns=['Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4'], errors='ignore')
         df = df.rename(columns={'v1': 'label', 'v2': 'message'})
         df['length'] = df['message'].apply(len)
         df['label_num'] = df['label'].map({'ham': 0, 'spam': 1})
         return df
     except FileNotFoundError:
-        st.error("File 'spam.csv' not found. Please make sure it is in the data directory.")
+        st.error(f"File not found at {data_path}. Please make sure it is in the data directory.")
         return None
 
 def count_uppercase_ratio(text):
