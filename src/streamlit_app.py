@@ -152,7 +152,7 @@ if df_raw is not None:
             st.write(df['label'].value_counts())
         with col2:
             fig, ax = plt.subplots()
-            sns.countplot(x='label', data=df, palette=['skyblue', 'pink'], ax=ax)
+            sns.countplot(x='label', data=df, hue='label', palette=['skyblue', 'pink'], legend=False, ax=ax)
             st.pyplot(fig)
 
         # 2. Message Length
@@ -188,7 +188,7 @@ if df_raw is not None:
         # 4. Uppercase Ratio
         st.subheader("Uppercase Ratio")
         fig, ax = plt.subplots()
-        sns.boxplot(x='label', y='uppercase_ratio', data=df, palette=['skyblue', 'salmon'], ax=ax)
+        sns.boxplot(x='label', y='uppercase_ratio', data=df, hue='label', palette=['skyblue', 'salmon'], legend=False, ax=ax)
         st.pyplot(fig)
 
     elif page == "Model Training":
