@@ -12,6 +12,7 @@ from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from wordcloud import WordCloud
 from sklearn.metrics import classification_report, confusion_matrix, roc_curve, auc
+from sklearn.model_selection import train_test_split
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.sequence import pad_sequences
@@ -72,7 +73,7 @@ def load_artifacts():
         artifacts['cnn'] = load_model(os.path.join(models_dir, 'cnn.h5'))
         
     except FileNotFoundError as e:
-        st.error(f"Error loading artifacts: {e}")
+        st.error(f"Error loading artifacts: {e}. Pastikan file model Anda ada.")
         return None
     except Exception as e:
         st.error(f"An unexpected error occurred while loading artifacts: {e}")
@@ -114,6 +115,68 @@ def preprocess_dataframe(df):
     df['lemmatization'] = df['stopwords'].apply(apply_lemmatization)
     return df
 
+@st.cache_data
+def perform_data_split(df, tfidf_vectorizer, scaler, tokenizer, maxlen=200):
+    """Melakukan split data 70% train, 15% validation, 15% test dan pra-pemrosesan fitur."""
+    
+    Y = df['label_num']
+    
+    # Split 1: 70% Train, 30% Temp (Val + Test)
+    # Gunakan df.index sebagai Y agar Y_train/Y_temp adalah index,
+    # tetapi karena kita menggunakan stratify=Y, kita harus menggunakan label aslinya.
+    # Namun, kita pastikan X_val_df dan Y_val diproses secara independen.
+    X_train_df, X_temp_df, Y_train, Y_temp = train_test_split(
+        df, Y, test_size=0.3, random_state=42, stratify=Y
+    )
+    
+    # Split 2: 50% Validation, 50% Test (dari 30% Temp, jadi 15% Val, 15% Test)
+    # Kita hanya membutuhkan X_val_df dan Y_val
+    X_val_df, X_test_df, Y_val, Y_test = train_test_split(
+        X_temp_df, Y_temp, test_size=0.5, random_state=42, stratify=Y_temp
+    )
+    
+    # --- Validation Data Feature Extraction ---
+    
+    # 1. TFIDF Features - Hanya menggunakan X_val_df yang 15%
+    X_val_tfidf_array = tfidf_vectorizer.transform(X_val_df['lemmatization']).toarray()
+    X_val_tfidf = pd.DataFrame(X_val_tfidf_array)
+    
+    # 2. Length Scaled Feature - Hanya menggunakan X_val_df yang 15%
+    X_val_length_scaled_array = scaler.transform(X_val_df[['length']])
+    X_val_length_scaled = pd.DataFrame(X_val_length_scaled_array, columns=['length_scaled'])
+    
+    # 3. Concatenate (aman karena keduanya dibuat dari array)
+    X_val_final = pd.concat([X_val_tfidf, X_val_length_scaled], axis=1)
+    
+    # 4. CNN data 
+    sequences_val = tokenizer.texts_to_sequences(X_val_df['lemmatization'])
+    X_val_pad = pad_sequences(sequences_val, maxlen=maxlen, padding='post', truncating='post')
+    
+    # 5. Y_val label (PASTIKAN index-nya di-reset agar cocok)
+    # Gunakan .copy() untuk menjamin Y_val adalah objek baru dan konsisten.
+    Y_val_clean = Y_val.copy().reset_index(drop=True)
+    
+    # --- Test Data Feature Extraction ---
+    
+    # 1. TFIDF Features - Test
+    X_test_tfidf_array = tfidf_vectorizer.transform(X_test_df['lemmatization']).toarray()
+    X_test_tfidf = pd.DataFrame(X_test_tfidf_array)
+    
+    # 2. Length Scaled Feature - Test
+    X_test_length_scaled_array = scaler.transform(X_test_df[['length']])
+    X_test_length_scaled = pd.DataFrame(X_test_length_scaled_array, columns=['length_scaled'])
+    
+    # 3. Concatenate - Test
+    X_test_final = pd.concat([X_test_tfidf, X_test_length_scaled], axis=1)
+    
+    # 4. CNN data - Test
+    sequences_test = tokenizer.texts_to_sequences(X_test_df['lemmatization'])
+    X_test_pad = pad_sequences(sequences_test, maxlen=maxlen, padding='post', truncating='post')
+    
+    # 5. Y_test label
+    Y_test_clean = Y_test.copy().reset_index(drop=True)
+    
+    return X_val_final, Y_val_clean, X_val_pad, X_test_final, Y_test_clean, X_test_pad
 # --- Main App ---
 
 st.title("🛡️ Spam Detection Dashboard")
@@ -129,10 +192,16 @@ if df_raw is not None and artifacts is not None:
     # Preprocessing (Cached)
     with st.spinner('Preprocessing data...'):
         df = preprocess_dataframe(df_raw)
+        
+    # Data Split & Feature Extraction (Cached)
+    # Ini harus menghasilkan sekitar 836 baris (15% dari 5572) untuk Val dan Test
+    X_val_final, Y_val, X_val_pad, X_test_final, Y_test, X_test_pad = perform_data_split(
+        df, artifacts['tfidf'], artifacts['scaler'], artifacts['tokenizer']
+    )
 
     if page == "EDA":
+        # ... (Kode EDA Anda tetap sama) ...
         st.header("Exploratory Data Analysis")
-
         # 1. Class Distribution
         st.subheader("Class Distribution")
         col1, col2 = st.columns(2)
@@ -178,7 +247,9 @@ if df_raw is not None and artifacts is not None:
         fig, ax = plt.subplots()
         sns.boxplot(x='label', y='uppercase_ratio', data=df, hue='label', palette=['skyblue', 'salmon'], legend=False, ax=ax)
         st.pyplot(fig)
-
+        
+        # ---
+        
     elif page == "Model Info & Evaluation":
         st.header("Model Performance (Pre-trained)")
         
@@ -204,48 +275,32 @@ if df_raw is not None and artifacts is not None:
         model_key = model_map[model_option]
         model = artifacts[model_key]
         
-        # Prepare Data for Evaluation (Using entire dataset for demo purposes, or split if preferred)
-        # For a true evaluation, we should use a hold-out set. Here we'll split on the fly to show metrics.
-        from sklearn.model_selection import train_test_split
-        
-        # Feature Extraction
-        tfidf_vectorizer = artifacts['tfidf']
-        scaler = artifacts['scaler']
-        
-        X_tfidf = pd.DataFrame(tfidf_vectorizer.transform(df['lemmatization']).toarray())
-        X_length_scaled = pd.DataFrame(scaler.transform(df[['length']]), columns=['length_scaled'])
-        X_final = pd.concat([X_tfidf, X_length_scaled], axis=1)
-        Y = df['label_num']
-        
-        # Split (same seed as training to try and approximate validation set)
-        _, X_val, _, Y_val = train_test_split(X_final, Y, test_size=0.3, random_state=42, stratify=Y)
-        # Note: The original script split 70/15/15. This is just a rough approximation for visualization.
-        
-        st.info(f"Evaluating {model_option} on Validation Data...")
+        st.info(f"Evaluating **{model_option}** on **Validation Data (15%, {len(Y_val)} samples)**.")
         
         Y_pred = None
         Y_pred_proba = None
         
         if model_key == 'cnn':
-            tokenizer = artifacts['tokenizer']
-            sequences = tokenizer.texts_to_sequences(df['lemmatization'])
-            padded = pad_sequences(sequences, maxlen=200, padding='post', truncating='post')
-            # Split padded data
-            _, X_val_pad, _, Y_val = train_test_split(padded, Y, test_size=0.3, random_state=42, stratify=Y)
-            
-            Y_prob = model.predict(X_val_pad, verbose=0)
-            Y_pred = (Y_prob > 0.5).astype("int32")
-            Y_pred_proba = Y_prob
+            # Menggunakan data yang sudah dipad
+            X_eval = X_val_pad
+            Y_prob = model.predict(X_eval, verbose=0)
+            # Pastikan output prediksi 1D
+            Y_pred = (Y_prob > 0.5).astype("int32").flatten()
+            Y_pred_proba = Y_prob.flatten()
             
         elif model_key == 'isoforest':
-            # IF predicts -1 for anomaly (spam) and 1 for normal (ham)
-            if_pred = model.predict(X_val.values)
+            # Menggunakan data TFIDF + Length
+            X_eval = X_val_final
+            if_pred = model.predict(X_eval.values)
+            # IF predicts -1 (spam) and 1 (ham) -> convert to 1 (spam) and 0 (ham)
             Y_pred = [1 if x == -1 else 0 for x in if_pred]
-            Y_pred_proba = -model.decision_function(X_val.values)
+            Y_pred_proba = -model.decision_function(X_eval.values) # Jarak ke anomali, lebih besar = lebih mungkin spam
             
         else:
-            Y_pred = model.predict(X_val.values)
-            Y_pred_proba = model.predict_proba(X_val.values)[:, 1]
+            # Menggunakan data TFIDF + Length
+            X_eval = X_val_final
+            Y_pred = model.predict(X_eval.values)
+            Y_pred_proba = model.predict_proba(X_eval.values)[:, 1]
 
         col1, col2 = st.columns(2)
         with col1:
@@ -253,20 +308,28 @@ if df_raw is not None and artifacts is not None:
             cm = confusion_matrix(Y_val, Y_pred)
             fig, ax = plt.subplots()
             sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax)
+            ax.set_xlabel('Predicted Label')
+            ax.set_ylabel('True Label')
             st.pyplot(fig)
         
         with col2:
             st.write("ROC Curve")
-            fpr, tpr, _ = roc_curve(Y_val, Y_pred_proba)
-            roc_auc = auc(fpr, tpr)
-            fig, ax = plt.subplots()
-            ax.plot(fpr, tpr, label=f'AUC = {roc_auc:.2f}')
-            ax.plot([0, 1], [0, 1], 'k--')
-            ax.legend()
-            st.pyplot(fig)
+            # Hanya tampilkan ROC jika model memiliki fungsi predict_proba standar
+            if model_key != 'isoforest':
+                fpr, tpr, _ = roc_curve(Y_val, Y_pred_proba)
+                roc_auc = auc(fpr, tpr)
+                fig, ax = plt.subplots()
+                ax.plot(fpr, tpr, label=f'AUC = {roc_auc:.2f}', color='darkorange')
+                ax.plot([0, 1], [0, 1], 'k--', label='Chance')
+                ax.set_xlabel('False Positive Rate')
+                ax.set_ylabel('True Positive Rate')
+                ax.legend(loc="lower right")
+                st.pyplot(fig)
+            else:
+                 st.info("ROC Curve for Isolation Forest is typically calculated differently (e.g., based on decision function/anomaly score).")
 
         st.text("Classification Report")
-        st.code(classification_report(Y_val, Y_pred))
+        st.code(classification_report(Y_val, Y_pred, target_names=['ham', 'spam']))
 
     elif page == "Prediction":
         st.header("Spam Prediction")
@@ -313,17 +376,19 @@ if df_raw is not None and artifacts is not None:
                     tokenizer = artifacts['tokenizer']
                     seq = tokenizer.texts_to_sequences([processed_text])
                     pad = pad_sequences(seq, maxlen=200, padding='post', truncating='post')
+                    
                     prob = model.predict(pad, verbose=0)[0][0]
                     prediction = 1 if prob > 0.5 else 0
                     probability = prob
                     
                 else:
-                    # Feature Extraction
+                    # Feature Extraction (TFIDF + Length)
                     tfidf_vectorizer = artifacts['tfidf']
                     scaler = artifacts['scaler']
                     
                     input_tfidf = tfidf_vectorizer.transform([processed_text])
                     input_len = len(user_input)
+                    # NOTE: scaler.transform expects a 2D array
                     input_len_scaled = scaler.transform([[input_len]])
                     
                     input_final = pd.concat([
@@ -332,17 +397,18 @@ if df_raw is not None and artifacts is not None:
                     ], axis=1)
                     
                     if model_key == 'isoforest':
-                        pred_raw = model.predict(input_final)[0]
+                        pred_raw = model.predict(input_final.values)[0]
                         prediction = 1 if pred_raw == -1 else 0
-                        probability = -model.decision_function(input_final)[0]
+                        probability = -model.decision_function(input_final.values)[0] # Anomaly score
                     else:
-                        prediction = model.predict(input_final)[0]
-                        probability = model.predict_proba(input_final)[0][1]
+                        prediction = model.predict(input_final.values)[0]
+                        probability = model.predict_proba(input_final.values)[0][1]
 
                 # Display Result
                 st.markdown("### Result:")
                 if prediction == 1:
-                    st.error(f"🚨 SPAM Detected! (Confidence: {probability:.2f})")
+                    st.error(f"🚨 **SPAM Detected!** (Confidence: {probability:.2f})")
                 else:
-                    st.success(f"✅ HAM (Not Spam). (Confidence: {1-probability if model_key != 'isoforest' else 'N/A'}:.2f)")
-
+                    # Confidence untuk HAM
+                    confidence_display = f"Confidence: {1 - probability:.2f}" if model_key != 'isoforest' else 'Anomaly Score: N/A'
+                    st.success(f"✅ **HAM (Not Spam).** ({confidence_display})")
