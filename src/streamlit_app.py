@@ -212,7 +212,7 @@ if df_raw is not None and artifacts is not None:
         tfidf_vectorizer = artifacts['tfidf']
         scaler = artifacts['scaler']
         
-        X_tfidf = pd.DataFrame(tfidf_vectorizer.transform(df['lemmatization']).toarray(), columns=tfidf_vectorizer.get_feature_names_out())
+        X_tfidf = pd.DataFrame(tfidf_vectorizer.transform(df['lemmatization']).toarray())
         X_length_scaled = pd.DataFrame(scaler.transform(df[['length']]), columns=['length_scaled'])
         X_final = pd.concat([X_tfidf, X_length_scaled], axis=1)
         Y = df['label_num']
@@ -327,7 +327,7 @@ if df_raw is not None and artifacts is not None:
                     input_len_scaled = scaler.transform([[input_len]])
                     
                     input_final = pd.concat([
-                        pd.DataFrame(input_tfidf.toarray(), columns=tfidf_vectorizer.get_feature_names_out()),
+                        pd.DataFrame(input_tfidf.toarray()),
                         pd.DataFrame(input_len_scaled, columns=['length_scaled'])
                     ], axis=1)
                     
